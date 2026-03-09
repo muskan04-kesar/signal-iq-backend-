@@ -14,7 +14,9 @@ class IntersectionMode(str, Enum):
     EMERGENCY_OVERRIDE = "EMERGENCY_OVERRIDE"
 
 class Intersection(BaseModel):
-    id: str  # e.g., "I-101"
+    id: str  # e.g., "S1"
+    lat: float = 0.0
+    lng: float = 0.0
     nsSignal: SignalState
     ewSignal: SignalState
     timer: float
@@ -24,9 +26,8 @@ class Intersection(BaseModel):
 
 class Vehicle(BaseModel):
     id: str
-    laneId: str
-    laneType: str # "horizontal" or "vertical"
-    direction: str # "north", "south", "east", "west"
+    edge_source: str
+    edge_target: str
     position: float
     speed: float
     target_speed: float = 10.0 # Speed to resume after stopping
@@ -35,7 +36,8 @@ class Vehicle(BaseModel):
 class EmergencyVehicle(BaseModel):
     id: str
     position: float
-    laneId: str
+    edge_source: str
+    edge_target: str
     speed: float
     route: List[str] # List of intersection IDs
     active: bool
