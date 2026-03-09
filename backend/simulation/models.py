@@ -13,6 +13,10 @@ class IntersectionMode(str, Enum):
     AI_OPTIMIZED = "AI_OPTIMIZED"
     EMERGENCY_OVERRIDE = "EMERGENCY_OVERRIDE"
 
+class NodeAIPrediction(BaseModel):
+    congestionLevel: str
+    flowImprovement: str
+
 class Intersection(BaseModel):
     id: str  # e.g., "S1"
     lat: float = 0.0
@@ -23,6 +27,7 @@ class Intersection(BaseModel):
     mode: IntersectionMode
     nsGreenTime: float = 10.0
     ewGreenTime: float = 10.0
+    aiPrediction: Optional[NodeAIPrediction] = None
 
 class Vehicle(BaseModel):
     id: str
@@ -32,6 +37,8 @@ class Vehicle(BaseModel):
     speed: float
     target_speed: float = 10.0 # Speed to resume after stopping
     type: str # "car", "truck"
+    lat: float = 0.0
+    lng: float = 0.0
 
 class EmergencyVehicle(BaseModel):
     id: str
@@ -43,6 +50,11 @@ class EmergencyVehicle(BaseModel):
     active: bool
     current_target_index: int = 0
     type: str = "emergency"
+    lat: float = 0.0
+    lng: float = 0.0
+
+class EmergencyRoutePayload(BaseModel):
+    route: List[str]
 
 class GridState(BaseModel):
     intersections: List[Intersection]

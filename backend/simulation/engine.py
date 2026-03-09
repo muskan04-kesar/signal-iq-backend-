@@ -6,10 +6,11 @@ from .models import (
     Intersection, IntersectionMode, SignalState, Vehicle, GridState, SignalUpdate, 
     EmergencyVehicle, AIStatus, AIPrediction, AIRecommendation,
     RoadOverview, ZoneOverview, GridOverview, IntersectionSummary, SignalDetails,
-    TrafficPattern, PatternUpdateResult, OptimizationResult
+    TrafficPattern, PatternUpdateResult, OptimizationResult, NodeAIPrediction
 )
 from . import config
 from .topology import CIVIL_LINES_SIGNALS, CIVIL_LINES_EDGES, topology_signals, adjacency
+from .ml_predictor import ml_predictor
 
 class SimulationEngine:
     def __init__(self):
@@ -24,8 +25,8 @@ class SimulationEngine:
 
     def _get_edge_distance(self, source: str, target: str) -> float:
         for adj in adjacency.get(source, []):
-            if adj["target"] == target:
-                return adj["distance"]
+            if adj.get("target") == target:
+                return float(adj.get("distance", 100.0))
         return 100.0
 
     def _get_vehicles_on_edge(self, source_id: str, target_id: str) -> List[Vehicle]:
@@ -76,6 +77,24 @@ class SimulationEngine:
             type="car"
         )
         self.vehicles.append(vehicle)
+
+    def _calculate_lat_lng(self, vehicle: Vehicle) -> tuple[float, float]:
+        source = topology_signals.get(vehicle.edge_source)
+        target = topology_signals.get(vehicle.edge_target)
+        
+        if not source or not target:
+            return 0.0, 0.0
+            
+        edge_dist = self._get_edge_distance(vehicle.edge_source, vehicle.edge_target)
+        if edge_dist <= 0:
+            return source["lat"], source["lng"]
+            
+        progress = min(1.0, max(0.0, vehicle.position / edge_dist))
+        
+        lat = source["lat"] + (target["lat"] - source["lat"]) * progress
+        lng = source["lng"] + (target["lng"] - source["lng"]) * progress
+        
+        return lat, lng
 
     def update(self, dt: float):
         self._update_signals(dt)
@@ -128,6 +147,17 @@ class SimulationEngine:
         max_lane_id = "None"
         
         for intersection in self.intersections.values():
+            # Calculate ML prediction for all nodes
+            ns_load, ew_load = self._calculate_density(intersection.id)
+            density = ns_load + ew_load
+            inflow = random.uniform(0.5, 1.5) * max(1, density) # Simulated inflow
+            
+            prediction = ml_predictor.predict(density, inflow)
+            intersection.aiPrediction = NodeAIPrediction(
+                congestionLevel=prediction["congestionLevel"],
+                flowImprovement=prediction["flowImprovement"]
+            )
+            
             if intersection.mode != IntersectionMode.AI_OPTIMIZED:
                 continue
                 
@@ -317,6 +347,8 @@ class SimulationEngine:
                 # check out of bounds if something went wrong
                 if v.position < 0: v.position = 0
 
+                v.lat, v.lng = self._calculate_lat_lng(v)
+
                 if v.position >= edge_dist:
                     neighbors = [adj for adj in adjacency.get(target_id, []) if adj["target"] != source_id]
                     if neighbors:
@@ -365,17 +397,23 @@ class SimulationEngine:
         if not route or len(route) < 2:
             route = ["S34", "S1", "S17", "S18", "S52"] 
         
+        # Verify route nodes exist
+        for r in route:
+            if r not in self.intersections:
+                return
+
         self.emergency_vehicle = EmergencyVehicle(
             id="EM-1",
             position=0.0, 
             edge_source=route[0],
             edge_target=route[1],
-            speed=35.0, 
+            speed=15.0, # Slowed down for visibility
             route=route,
             active=True,
             current_target_index=1,
             type="emergency"
         )
+        self.emergency_vehicle.lat, self.emergency_vehicle.lng = self._calculate_lat_lng(self.emergency_vehicle)
         print(f"Emergency Vehicle Started on route {route}")
 
     def stop_emergency(self):
@@ -397,6 +435,7 @@ class SimulationEngine:
             
         ev = self.emergency_vehicle
         ev.position += ev.speed * dt
+        ev.lat, ev.lng = self._calculate_lat_lng(ev)
         
         edge_dist = self._get_edge_distance(ev.edge_source, ev.edge_target)
         target_id = ev.edge_target
@@ -427,6 +466,7 @@ class SimulationEngine:
                 ev.edge_source = ev.edge_target
                 ev.edge_target = ev.route[ev.current_target_index]
                 ev.position = 0.0
+                print(f"EV traversing to {ev.edge_target}")
             else:
                 self.stop_emergency()
 

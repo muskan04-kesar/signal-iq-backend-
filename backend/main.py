@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .simulation.engine import simulation_engine
-from .simulation.models import GridState, Intersection, SignalUpdate, AIToggle, AIStatus, GridOverview, IntersectionSummary, SignalDetails, TrafficPattern, PatternUpdateResult, OptimizationResult
+from .simulation.models import GridState, Intersection, SignalUpdate, AIToggle, AIStatus, GridOverview, IntersectionSummary, SignalDetails, TrafficPattern, PatternUpdateResult, OptimizationResult, EmergencyRoutePayload
 
 # Background task for simulation loop
 @asynccontextmanager
@@ -83,11 +83,11 @@ async def toggle_ai_mode(toggle: AIToggle):
     simulation_engine.set_ai_mode(toggle.enabled)
     return {"status": "AI Mode Updated", "enabled": toggle.enabled}
 
-@app.post("/api/emergency/start")
-async def start_emergency():
-    """Starts an emergency vehicle simulation"""
+@app.post("/api/emergency/dispatch")
+async def start_emergency(payload: EmergencyRoutePayload):
+    """Starts an emergency vehicle simulation along a specific route"""
     try:
-        simulation_engine.start_emergency()
+        simulation_engine.start_emergency(payload.route)
         return {"status": "Emergency Started", "vehicle": simulation_engine.emergency_vehicle}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
